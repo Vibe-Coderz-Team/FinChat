@@ -85,9 +85,13 @@ class TraceEngine:
 
 engine = TraceEngine()
 
-def extract_intent(user_query: str) -> dict:
+def extract_intent(user_query: str, custom_api_key: str = None) -> dict:
     try:
-        client = OpenAI(base_url=API_BASE, api_key=API_KEY)
+        key_to_use = custom_api_key if custom_api_key else API_KEY
+        if not key_to_use:
+            raise Exception("No API Key provided. Please enter one in the UI settings.")
+            
+        client = OpenAI(base_url=API_BASE, api_key=key_to_use)
         resp = client.chat.completions.create(
             model=MODEL_NAME,
             messages=[
@@ -106,7 +110,7 @@ def extract_intent(user_query: str) -> dict:
 
 def generate_html_cards(traces: list, error_msg: str = None) -> str:
     if error_msg:
-        return f"<span style='color:#ff0000; font-weight:bold;'>[LLM ERROR]</span> <span style='color:#ffffff;'>The AI model failed to process the request: {error_msg}. Please switch to Local Gemma in the .env file.</span>"
+        return f"<span style='color:#ff0000; font-weight:bold;'>[LLM ERROR]</span> <span style='color:#ffffff;'>{error_msg}</span>"
         
     if not traces:
         return "<span style='color:#ff0000; font-weight:bold;'>[NOT FOUND]</span> <span style='color:#ffffff;'>No matching transactions found in the database. Please try another search.</span>"
@@ -155,11 +159,12 @@ def generate_html_cards(traces: list, error_msg: str = None) -> str:
 
 class ChatRequest(BaseModel):
     query: str
+    api_key: str = None
 
 @app.post("/api/chat")
 def chat(request: ChatRequest):
     try:
-        filters = extract_intent(request.query)
+        filters = extract_intent(request.query, request.api_key)
         # Execute search
         results = engine.search(filters)
         traces = [engine.trace(row["transaction_id"]) for _, row in results.head(5).iterrows()]
